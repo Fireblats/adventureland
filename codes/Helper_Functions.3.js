@@ -54,3 +54,7 @@ function item_exists(item_name){
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+function Test_Func() {
+    print("Test_Func");
+}
