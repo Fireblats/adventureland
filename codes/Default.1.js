@@ -1,3 +1,4 @@
+// This code is for the coding game "Adventure Land"
 // Hey there!
 // This is CODE, lets you control your character with code.
 // If you don't know how to code, don't worry, It's easy.
@@ -339,38 +340,40 @@ function Upgrade_Items(){
 
 
 setInterval(function(){
-
+	// Custom functions
 	custom_use_hp_or_mp();
 	loot();
 	custom_buy_potions();
 
+	// Upgrade items
 	if(character.gold >= max_upgrade_money){
 		upgrading = true;
 		Upgrade_Items();
 		return;
 	}
 
+	// Don't do anything if we're not in attack mode, dead, or moving
 	if(!attack_mode || character.rip || is_moving(character)) return;
 
+	// Debug info
 	if(debug) {
-		safe_log("Character position: " + character.real_x + ", " + character.real_y);
+		// safe_log("Character position: " + character.real_x + ", " + character.real_y);
+		// Test the print function
 	}
+	load_code("Helper_Functions");
+	print("Character position: " + character.real_x + ", " + character.real_y);
 
+	// Move to the monster
 	if (character.real_x != monsters[farm_monster].x || character.real_y != monsters[farm_monster].y) {
 		smart_move({x: monsters[farm_monster].x, y: monsters[farm_monster].y});
 		return;
 	}
 
+	// Get the target
 	var target=get_targeted_monster();
 	if(!target)
 	{
-		target=get_nearest_monster({min_xp:150,max_att:100});
-
-		// Make sure target matches monster skin
-		if(target && target.skin != monsters[farm_monster].skin){
-			target = null;
-		}
-
+		target=get_nearest_monster({min_xp:150,max_att:100,max_xp:1000});
 		if(target) change_target(target);
 		else
 		{
@@ -379,6 +382,7 @@ setInterval(function(){
 		}
 	}
 
+	// Move towards the monster if we're not in range
 	if(!is_in_range(target))
 	{
 		move(
@@ -387,6 +391,7 @@ setInterval(function(){
 			);
 		// Walk half the distance
 	}
+	// Attack the monster
 	else if(can_attack(target))
 	{
 		set_message("Attacking");
