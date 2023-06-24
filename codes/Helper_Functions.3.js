@@ -8,5 +8,3 @@
 function print(message){
     safe_log(message);
 }
-
-safe_log('code loaded weeeeeee');
