@@ -47,7 +47,7 @@ export function item_exists(item_name: string): boolean {
     return false;
 }
 
-export function customHPandMP() {
+export async function customHPandMP() {
     if (character.hp < character.max_hp - 200) {
         use_skill("use_hp");
     }
