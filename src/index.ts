@@ -1,4 +1,5 @@
-import { customHPandMP } from "./Helper_Functions.js";
+import { GItem } from "typed-adventureland";
+import { customHPandMP } from "./Helper_Functions.3";
 
 // Hey there!
 // This is CODE, lets you control your character with code.
@@ -10,7 +11,21 @@ interface Settings {
     attack_mode: boolean;
     upgrading: boolean;
     currentMonster: typeof customMonsters;
+    minimumGoldToStopUpgrading: number;
+    goldToStartUpgrading: number;
+    upgrade_mode: boolean;
+    currentUpgradeItem: GItem;
+    buyingPotions: boolean;
+    maxHealthPotions: number;
+    maxManaPotions: number;
+    healthPotionName: string;
+    manaPotionName: string;
+    upgradeItem: GItem;
+    allItemsUpgraded: boolean;
 }
+
+// List of t1 mage items
+const t1MageItems = [G.items.staff, G.items.helmet, G.items.shoes, G.items.gloves, G.items.coat];
 
 const customMonsters = {
     Bee: {
@@ -28,6 +43,17 @@ const defaultSettings = {
     attack_mode: true,
     upgrading: false,
     currentMonster: customMonsters.Crab,
+    minimumGoldToStopUpgrading: 15000,
+    goldToStartUpgrading: 150000,
+    upgrade_mode: false,
+    currentUpgradeItem: G.items.staff,
+    buyingPotions: false,
+    maxHealthPotions: 200,
+    maxManaPotions: 200,
+    healthPotionName: "hpot0",
+    manaPotionName: "mpot0",
+    upgradeItem: G.items.staff,
+    allItemsUpgraded: false,
 };
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -48,6 +74,11 @@ const customCharacters = {
         y: -184.9999999,
         id: "newupgrade",
     },
+    // Buying Potions
+    Ernis: {
+        x: -39.864347750250225,
+        y: -147.7134982894214,
+    },
 };
 
 function saveSetting(key: string, value: any) {
@@ -59,7 +90,7 @@ function saveSetting(key: string, value: any) {
  * @param {number} ms - The number of milliseconds to sleep for.
  * @returns {Promise<void>} A promise that resolves after the specified time has elapsed.
  */
-function sleep(ms: number) {
+function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
@@ -78,9 +109,20 @@ function createDefaultSettings() {
 }
 
 let _settings = {
-    attack_mode: readSetting("attack_mode"),
-    upgrading: readSetting("upgrading"),
-    currentMonster: readSetting("currentMonster"),
+    attack_mode: false,
+    upgrading: false,
+    currentMonster: customMonsters.Crab,
+    minimumGoldToStopUpgrading: 15000,
+    goldToStartUpgrading: 150000,
+    upgrade_mode: false,
+    currentUpgradeItem: G.items.staff,
+    buyingPotions: false,
+    maxHealthPotions: 200,
+    maxManaPotions: 200,
+    healthPotionName: "hpot0",
+    manaPotionName: "mpot0",
+    upgradeItem: G.items.staff,
+    allItemsUpgraded: false,
 };
 
 function getSettings() {
@@ -100,13 +142,64 @@ const settings: Settings = {
     attack_mode: Boolean(readSetting("attack_mode")),
     upgrading: Boolean(readSetting("upgrading")),
     currentMonster: readSetting("currentMonster") as unknown as typeof customMonsters,
+    minimumGoldToStopUpgrading: readSetting("minimumGoldToStopUpgrading") as unknown as number,
+    goldToStartUpgrading: readSetting("goldToStartUpgrading") as unknown as number,
+    upgrade_mode: Boolean(readSetting("upgrade_mode")),
+    currentUpgradeItem: readSetting("currentUpgradeItem") as unknown as GItem,
+    buyingPotions: Boolean(readSetting("buyingPotions")),
+    maxHealthPotions: readSetting("maxHealthPotions") as unknown as number,
+    maxManaPotions: readSetting("maxManaPotions") as unknown as number,
+    healthPotionName: readSetting("healthPotionName") as unknown as string,
+    manaPotionName: readSetting("manaPotionName") as unknown as string,
+    upgradeItem: readSetting("upgradeItem") as unknown as GItem,
+    allItemsUpgraded: Boolean(readSetting("allItemsUpgraded")),
 };
+
+async function checkHealthPotions() {
+    // Make sure we need potions
+    if (quantity("hpot0") < 10 || quantity("mpot0") < 10) {
+        // Make sure we can afford potions
+        const hpot0Price = G.items.hpot0.g;
+        const mpot0Price = G.items.mpot0.g;
+        const currentHealthPotions = quantity("hpot0");
+        const currentManaPotions = quantity("mpot0");
+        const { maxHealthPotions } = settings;
+        const { maxManaPotions } = settings;
+        const { gold } = character;
+        const goldNeeded =
+            (maxHealthPotions - currentHealthPotions) * hpot0Price +
+            (maxManaPotions - currentManaPotions) * mpot0Price;
+
+        if (gold >= goldNeeded) {
+            settings.buyingPotions = true;
+        }
+    } else {
+        settings.buyingPotions = false;
+    }
+
+    if (settings.buyingPotions) {
+        // Teleport to town
+        use_skill("use_town");
+        // Wait for teleport
+        const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
+        safe_log("Waiting 5 seconds for teleport...");
+        await use_skill("use_town").then(
+            async () => {
+                safe_log("Teleported to town");
+            },
+            async () => {
+                safe_log("Failed to teleport to town");
+            },
+        );
+        await delay(5000);
+        safe_log("Waited 5 seconds, buying potions...");
+    }
+}
 
 // Fights monsters
 async function battleMonsters(monster: any) {
     monster = JSON.parse(monster);
     // If we're not in the right location, move there.
-    safe_log(`Monster x: ${monster.x}, y: ${monster.y}`);
     if (character.real_x !== monster.x || character.real_y !== monster.y) {
         // Move to the monster
         if (!smart.moving) {
@@ -118,7 +211,6 @@ async function battleMonsters(monster: any) {
         }
     } else {
         // Find a monster to attack.
-        safe_log(`Getting ready to attack ${monster}`);
         let target = get_targeted_monster();
         if (!target) {
             target = get_nearest_monster({ min_xp: 100, max_att: 120 });
@@ -148,19 +240,99 @@ async function battleMonsters(monster: any) {
     }
 }
 
+async function chooseUpgradeItem() {
+    // Loop through all the t1MageItems
+    // If we find an item that's t7 or higher, move on to the next item
+    // If we can't find an item that's t7 or higher on our character or in our inventory, upgrade the first item that's not t7 or higher
+    for (const [, value] of Object.entries(t1MageItems)) {
+        let foundItem = false;
+        const itemName = value.id;
+
+        // Search for the item on our bag
+        const searchItem = character.items.filter(
+            (item) =>
+                item !== null &&
+                item !== undefined &&
+                item.name === itemName &&
+                item.level !== undefined &&
+                item.level >= 7,
+        );
+        if (searchItem.length > 0) {
+            foundItem = true;
+            safe_log(`Found Found T${searchItem[0].level} ${itemName} in bag`);
+        }
+
+        // Search for the item in our inventory
+        if (!foundItem) {
+            const slotItem = character.slots;
+            safe_log(slotItem);
+            // Loop through all the slots
+            for (const [key1, value1] of Object.entries(character.slots)) {
+                // If the slot is not null and the item name matches the item we're looking for and the item level is greater than or equal to 7, we found the item
+                if (
+                    value1 !== null &&
+                    value1 !== undefined &&
+                    value1.name === itemName &&
+                    value1.level !== undefined &&
+                    value1.level >= 7
+                ) {
+                    safe_log(
+                        `Found T${value1.level} ${itemName} in slot key1: ${key1}, value1.name: ${value1.name}`,
+                    );
+                    foundItem = true;
+                    break;
+                }
+            }
+        }
+        // If we didn't find the item, choose it for upgrading
+        if (!foundItem) {
+            safe_log(`Didn't find T7+ ${itemName}, choosing for upgrading`);
+            // DEBUG
+            safe_log(`settings.upgradeItem: ${settings.upgradeItem}`);
+            if (value !== undefined) settings.upgradeItem = value;
+            return;
+        }
+    }
+}
+
+async function upgradeItems() {
+    safe_log("Upgrading items");
+    // If all items are upgraded, return
+    if (settings.allItemsUpgraded) return;
+
+    // If we have more than the set amount of gold, start upgrading
+    if (character.gold > settings.goldToStartUpgrading) settings.upgrade_mode = true;
+
+    // If we have less than the set amount of gold, stop upgrading
+    if (character.gold < settings.minimumGoldToStopUpgrading) settings.upgrade_mode = false;
+
+    // If we're not in upgrade mode, return
+    if (!settings.upgrade_mode) return;
+
+    // Choose an item to upgrade
+    chooseUpgradeItem();
+}
+
+// Main Loop
 setInterval(async () => {
     // Create settings if they don't exist
     createDefaultSettings();
 
+    // Heal and loot
     customHPandMP();
     loot();
 
+    // Check health potions
+    await checkHealthPotions();
+
+    // Upgrade items
+    await upgradeItems();
+
+    // Farm monsters
     if (settings.attack_mode || character.rip || is_moving(character) || !smart.moving) {
-        safe_log("battling monsters");
         await battleMonsters(settings.currentMonster as typeof customMonsters);
     }
 }, 1000 / 4); // Loops every 1/4 seconds.
-
 // Learn Javascript: https://www.codecademy.com/learn/introduction-to-javascript
 // Write your own CODE: https://github.com/kaansoral/adventureland
 // NOTE: If the tab isn't focused, browsers slow down the game
