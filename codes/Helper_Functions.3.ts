@@ -10,19 +10,21 @@ async function print(message) {
     safe_log(message);
 }
 
+
 /**
  * Returns the total quantity of a given item in the character's inventory.
  * @param {string} item_name - The name of the item to search for.
  * @returns {number} The total quantity of the item in the character's inventory.
  */
-function get_item_quantity(item_name) {
+function get_item_quantity(item_name: string): number {
+    if (item_name === null || item_name === undefined) return 0;
     let quantity = 0;
     for (let i = 0; i < character.items.length; i++) {
         if (character.items[i] == null) {
             break;
         }
-        if (character.items[i].name === item_name) {
-            quantity += character.items[i].q;
+        if (character.items[i] !== undefined && character.items[i].name === item_name) {
+            quantity += character.items[i].q ?? 0;
         }
     }
     return quantity;
@@ -33,7 +35,7 @@ function get_item_quantity(item_name) {
  * @param {string} item_name - The name of the item to search for.
  * @returns {boolean} True if the item exists in the character's inventory, false otherwise.
  */
-function item_exists(item_name){
+function item_exists(item_name) {
     for (let i = 0; i < character.items.length; i++) {
         if (character.items[i] == null) {
             break;
@@ -46,13 +48,13 @@ function item_exists(item_name){
     return false;
 }
 
-/**
- * Sleeps for a given number of milliseconds.
- * @param {number} ms - The number of milliseconds to sleep for.
- * @returns {Promise<void>} A promise that resolves after the specified time has elapsed.
- */
-function sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+function customHPandMP() {
+    if (character.hp < character.max_hp - 200) {
+        use("use_hp");
+    }
+    if (character.mp < character.max_mp - 300) {
+        use("use_mp");
+    }
 }
 
 function Test_Func() {
