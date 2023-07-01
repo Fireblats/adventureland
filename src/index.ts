@@ -1,10 +1,12 @@
-import { ItemKey, ItemType, WeaponType } from "typed-adventureland";
+import { ItemKey } from "typed-adventureland";
 import { customHPandMP } from "./Helper_Functions.3";
 
 // Hey there!
 // This is CODE, lets you control your character with code.
 // If you don't know how to code, don't worry, It's easy.
 // Just set attack_mode to true and ENGAGE!
+// @TODO: Set debug points to figure out why we aren't upgrading.
+// @TODO: Possibly because we aren't finding the item?
 
 // List of t1 mage items
 const t1MageItems = [G.items.staff, G.items.helmet, G.items.shoes, G.items.gloves, G.items.coat];
@@ -64,6 +66,7 @@ const defaultSettings = {
     upgradeItem: G.items.staff,
     allItemsUpgraded: false,
     minimumScrollsToUpgrade: 28,
+    doTeleportToTown: true,
 };
 
 const defaultSettingsProxy = new Proxy(defaultSettings, {
@@ -74,6 +77,9 @@ const defaultSettingsProxy = new Proxy(defaultSettings, {
 
     set: (o, property, value) => {
         localStorage.setItem(property.toString(), JSON.stringify(value));
+        if (property === "upgrade_mode" && value === false) {
+            defaultSettingsProxy.doTeleportToTown = true;
+        }
         return true;
     },
 });
@@ -284,6 +290,11 @@ async function buyScrolls(currentScrollQuantity: number) {
     } else {
         // Purchase scrolls
         buy("scroll0", defaultSettingsProxy.minimumScrollsToUpgrade - currentScrollQuantity);
+        safe_log(
+            // eslint-disable-next-line prettier/prettier
+            `Bought ${defaultSettingsProxy.minimumScrollsToUpgrade - currentScrollQuantity
+            } scrolls for ${goldNeeded} gold`,
+        );
     }
 }
 
@@ -294,11 +305,20 @@ async function walkToUpgradeNpc() {
     }
 }
 
-function isItemKey(key: string): key is ItemType | WeaponType | Offhand {
-    return Object.values(G.items).includes(key);
+async function upgradeItem() {
+    const itemToUpgrade: number = locate_item(defaultSettingsProxy.upgradeItem.id as ItemKey);
+    const scrollItem: number = locate_item("scroll0");
+
+    const success = await upgrade(itemToUpgrade, scrollItem);
+
+    if (success) {
+        safe_log(`Upgraded ${defaultSettingsProxy.upgradeItem.id} successfully`);
+    } else {
+        safe_log(`Failed to upgrade ${defaultSettingsProxy.upgradeItem.id}, item is lost.`);
+    }
 }
 
-async function upgradeItems(townTeleport = false) {
+async function upgradeItems() {
     safe_log("Upgrading items");
     // If all items are upgraded, return
     if (defaultSettingsProxy.allItemsUpgraded) {
@@ -307,12 +327,14 @@ async function upgradeItems(townTeleport = false) {
     }
     // If we have more than the set amount of gold, start upgrading
     if (character.gold > defaultSettingsProxy.goldToStartUpgrading) {
+        safe_log(`Current gold: ${character.gold}, starting upgrade mode and stopping attack mode`);
         defaultSettingsProxy.upgrade_mode = true;
         defaultSettingsProxy.attack_mode = false;
     }
 
     // If we have less than the set amount of gold, stop upgrading
     if (character.gold < defaultSettingsProxy.minimumGoldToStopUpgrading) {
+        safe_log(`Current gold: ${character.gold}, stopping upgrade mode and starting attack mode`);
         defaultSettingsProxy.upgrade_mode = false;
         defaultSettingsProxy.attack_mode = true;
     }
@@ -326,10 +348,14 @@ async function upgradeItems(townTeleport = false) {
         defaultSettingsProxy.upgrade_mode = false;
         return;
     }
-    await chooseUpgradeItem();
+    safe_log(`upgrading item: ${defaultSettingsProxy.upgradeItem.id}`);
 
     // If character not in town, teleport to town
-    if (townTeleport) await teleportToTown();
+    // @TODO: TURN townTeleport off when we turn off upgrade move
+    if (defaultSettingsProxy.doTeleportToTown) {
+        await teleportToTown();
+        defaultSettingsProxy.doTeleportToTown = false;
+    }
 
     const currentScrolls = await needScrolls();
 
@@ -350,12 +376,7 @@ async function upgradeItems(townTeleport = false) {
     await walkToUpgradeNpc();
 
     // Upgrade item
-    await upgrade(
-        locate_item(defaultSettingsProxy.upgradeItem.id as string),
-        locate_item("scroll0").then(function (data) {
-            if (data.success) safe_log("Upgraded item successfully");
-            else safe_log("Failed to upgrade item");
-        }));
+    await upgradeItem();
 }
 
 // Main Loop
@@ -371,7 +392,7 @@ async function mainLoop() {
     await checkHealthPotions();
 
     // Upgrade items
-    await upgradeItems(true);
+    await upgradeItems();
 
     // Farm monsters
     if (
