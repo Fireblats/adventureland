@@ -1,18 +1,23 @@
-import { ItemKey } from "typed-adventureland";
+import { ItemKey, MonsterKey, SlotType } from "typed-adventureland";
 import { customHPandMP } from "./Helper_Functions.3";
+
+export type MonsterPosition = [number, number];
 
 // Hey there!
 // This is CODE, lets you control your character with code.
 // If you don't know how to code, don't worry, It's easy.
 // Just set attack_mode to true and ENGAGE!
-// @TODO: Set debug points to figure out why we aren't upgrading.
-// @TODO: Possibly because we aren't finding the item?
+// @TODO: Figure out why boundary is so far off.
 
 // List of t1 mage items
 const t1MageItems = [G.items.staff, G.items.helmet, G.items.shoes, G.items.gloves, G.items.coat];
+const t1RangerItems = [G.items.bow, G.items.helmet, G.items.shoes, G.items.gloves, G.items.coat];
+const t1WarriorItems = [G.items.sword, G.items.helmet, G.items.shoes, G.items.gloves, G.items.coat];
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const t1Mage2Items = [G.items.wbook0, G.items.helmet, G.items.shoes, G.items.gloves, G.items.coat];
 const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
-const customMonsters = {
+const customMonsters: Record<string, { name: string; x: number; y: number }> = {
     Bee: {
         name: "Bee",
         x: 496.78379392236116,
@@ -50,10 +55,12 @@ const customCharacters = {
     },
 };
 
+// WARNING: If you change these settings, you need to manually update the localStorage values.
+// These are not updated automatically.
 const defaultSettings = {
     attack_mode: true,
     upgrading: false,
-    currentMonster: customMonsters.Crab,
+    currentMonster: customMonsters.Bee,
     minimumGoldToStopUpgrading: 15000,
     goldToStartUpgrading: 150000,
     upgrade_mode: false,
@@ -65,7 +72,8 @@ const defaultSettings = {
     manaPotionName: "mpot0",
     upgradeItem: G.items.staff,
     allItemsUpgraded: false,
-    minimumScrollsToUpgrade: 28,
+    minimumScrollsToUpgrade: 1,
+    amountScrollsToBuy: 30,
     doTeleportToTown: true,
 };
 
@@ -89,17 +97,9 @@ const defaultSettingsProxy = new Proxy(defaultSettings, {
  * @param {number} ms - The number of milliseconds to sleep for.
  * @returns {Promise<void>} A promise that resolves after the specified time has elapsed.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-// Loops through defaultSettings and creates a new setting in localStorage if it doesn't exist
-function createLocalStorage() {
-    for (const [key, value] of Object.entries(defaultSettings)) {
-        if (!localStorage.getItem(key)) {
-            localStorage.setItem(key, JSON.stringify(value));
-        }
-    }
 }
 
 async function teleportToTown() {
@@ -114,6 +114,12 @@ async function teleportToTown() {
         },
     );
     await delay(5000);
+}
+
+async function teleportIfWeNeedTo() {
+    if (character.map === "main" && Math.abs(character.x) < 500 && Math.abs(character.y) < 500) {
+        await teleportToTown();
+    }
 }
 
 async function checkHealthPotions() {
@@ -139,7 +145,9 @@ async function checkHealthPotions() {
     }
 
     if (defaultSettingsProxy.buyingPotions) {
-        teleportToTown();
+        safe_log("Potions are making us teleport to town.");
+        await teleportIfWeNeedTo();
+        safe_log(`defaultSettingsProxy.buyingPotions: ${defaultSettingsProxy.buyingPotions}`);
         safe_log("Buying potions...");
 
         // Move to Ernis
@@ -157,40 +165,137 @@ async function checkHealthPotions() {
     }
 }
 
+function getMiddleOfBoundary(boundary: Array<number>) {
+    const x1 = boundary[0];
+    const y1 = boundary[1];
+    const x2 = boundary[2];
+    const y2 = boundary[3];
+
+    const mid_x = (x1 + x2) / 2;
+    const mid_y = (y1 + y2) / 2;
+
+    // Return x, y as an array
+    return [mid_x, mid_y] as MonsterPosition;
+}
+
+function chooseMonster() {
+    // Loop through monsters, finding ones on the grow list
+    const growList: Partial<Record<MonsterKey, MonsterPosition>> = {};
+    let monsterPosition: MonsterPosition = [0, 0];
+
+    if (G.maps.main.monsters) {
+        for (const monster of G.maps.main.monsters) {
+            if (monster.grow) {
+                // Get the monster's x, y position using getMiddleOfBoundary
+                monsterPosition = getMiddleOfBoundary(
+                    monster.boundary ? monster.boundary : [0, 0, 0, 0],
+                );
+
+                // Add the monster to the growList with its name as the key and the position as the value
+                if (monster !== undefined) {
+                    growList[monster.type] = monsterPosition;
+                }
+            }
+        }
+    }
+
+    // Loop through growList and game_log the monster name and position
+    for (const key of Object.keys(growList)) {
+        const monsterKey = key as MonsterKey;
+        if (!growList[monsterKey]) continue;
+    }
+
+    const max2ShotHealth = character.attack * 2;
+    let bestMob = "goo";
+    let bestMobHealth: number = G.monsters.goo.hp;
+
+    for (const key of Object.keys(growList)) {
+        const monsterKey = key as MonsterKey;
+        if (!growList[monsterKey]) continue;
+
+        const monsterHealth: number = G.monsters[monsterKey].hp;
+
+        if (monsterHealth < max2ShotHealth && monsterHealth > bestMobHealth) {
+            bestMob = monsterKey;
+            bestMobHealth = monsterHealth;
+
+            // If the key doesn't exist in customMonsters, create it.
+            if (!customMonsters[bestMob]) {
+                customMonsters[bestMob] = {
+                    name: bestMob,
+                    x: growList[key as MonsterKey]?.[0] ?? 0,
+                    y: growList[key as MonsterKey]?.[1] ?? 0,
+                };
+            }
+        }
+    }
+
+    // Set the current monster to the best mob
+    defaultSettingsProxy.currentMonster = customMonsters[bestMob];
+}
+
 // Fights monsters
 async function battleMonsters(monster: any) {
-    monster = JSON.parse(monster);
-    // If we're not in the right location, move there.
-    if (character.real_x !== monster.x || character.real_y !== monster.y) {
-        // Move to the monster
-        if (!smart.moving) {
-            smart_move({ x: monster.x, y: monster.y });
-            await sleep(4000);
-            safe_log("Done sleeping");
-        } else {
-            safe_log("Waiting for smart move to finish");
+    if (character.id === "Fireblats") {
+        // Choose which monster to farm :)
+        chooseMonster();
+        monster = customMonsters[defaultSettingsProxy.currentMonster.name];
+    }
+
+    if (character.id === "FireblatsW") {
+        const charX = Math.abs(character.x);
+        const charY = Math.abs(character.y);
+
+        if (
+            Math.abs(charX - Math.abs(monster.x)) > 150 ||
+            Math.abs(charY - Math.abs(monster.y)) > 150
+        ) {
+            safe_log(`Distance to monster.x: ${Math.abs(charX - Math.abs(monster.x))}`);
+            safe_log(`Distance to monster.y: ${Math.abs(charY - Math.abs(monster.y))}`);
+            if (!smart.moving) {
+                safe_log("to far away, moving to monster");
+                await smart_move({ x: monster.x, y: monster.y });
+            }
         }
     } else {
-        // Find a monster to attack.
-        let target = get_targeted_monster();
-        if (!target) {
-            target = get_nearest_monster({ min_xp: 100, max_att: 120 });
-
-            if (target?.skin !== monster.skin) {
-                target = null;
-            }
-
-            if (target) {
-                change_target(target);
-            } else {
-                set_message("No Monsters");
-                return;
+        // If we're not in the right location, move there.
+        if (character.real_x !== monster.x || character.real_y !== monster.y) {
+            // Move to the monster
+            if (!smart.moving) {
+                await smart_move({ x: monster.x, y: monster.y });
             }
         }
+    }
 
+    // Find a monster to attack.
+    let target = get_targeted_monster();
+    if (!target) {
+        target = get_nearest_monster({ min_xp: 100, max_att: 120 });
+
+        if (target) {
+            change_target(target);
+        } else {
+            set_message("No Monsters");
+            return;
+        }
+    }
+
+    // Melee chars
+    if (character.id === "FireblatsW") {
+        if (!is_in_range(target, "attack")) {
+            await move(
+                character.x + (target.x - character.x),
+                character.y + (target.y - character.y),
+            );
+        } else if (can_attack(target)) {
+            set_message("Attacking");
+            attack(target);
+        }
+    } else {
+        // Ranged Chars
         if (!is_in_range(target)) {
             // Walk half the distance
-            move(
+            await move(
                 character.x + (target.x - character.x) / 2,
                 character.y + (target.y - character.y) / 2,
             );
@@ -205,7 +310,21 @@ async function chooseUpgradeItem() {
     // Loop through all the t1MageItems
     // If we find an item that's t7 or higher, move on to the next item
     // If we can't find an item that's t7 or higher on our character or in our inventory, upgrade the first item that's not t7 or higher
-    for (const [, value] of Object.entries(t1MageItems)) {
+    let characterSet = null;
+
+    if (character.id === "Fireblats") {
+        characterSet = t1MageItems;
+    } else if (character.id === "FireblatsR") {
+        characterSet = t1RangerItems;
+    } else if (character.id === "FireblatsW") {
+        characterSet = t1WarriorItems;
+    }
+
+    if (characterSet === null) {
+        characterSet = t1MageItems;
+    }
+
+    for (const [, value] of Object.entries(characterSet)) {
         const itemName = value.id;
 
         // Search for the item on our bag
@@ -251,6 +370,11 @@ async function chooseUpgradeItem() {
 }
 
 async function needScrolls() {
+    if (locate_item("scroll0") === -1) {
+        safe_log(`We don't have any scrolls.`);
+        return -1;
+    }
+
     // Check how many scrolls we have.
     const scrolls = character.items.filter(
         (item) =>
@@ -271,7 +395,8 @@ async function needScrolls() {
 }
 
 async function buyScrolls(currentScrollQuantity: number) {
-    await teleportToTown();
+    safe_log(`Scrolls made us teleport to town.`);
+    await teleportIfWeNeedTo();
     safe_log("Buying scrolls...");
 
     // Walk to scroll vendor
@@ -281,7 +406,7 @@ async function buyScrolls(currentScrollQuantity: number) {
 
     const pricePerScroll = G.items.scroll0.g;
     const goldNeeded =
-        (defaultSettingsProxy.minimumScrollsToUpgrade - currentScrollQuantity) * pricePerScroll;
+        (defaultSettingsProxy.amountScrollsToBuy - currentScrollQuantity) * pricePerScroll;
 
     // If we don't have enough gold, return
     if (character.gold < goldNeeded) {
@@ -289,10 +414,10 @@ async function buyScrolls(currentScrollQuantity: number) {
         defaultSettingsProxy.upgrade_mode = false;
     } else {
         // Purchase scrolls
-        buy("scroll0", defaultSettingsProxy.minimumScrollsToUpgrade - currentScrollQuantity);
+        buy("scroll0", defaultSettingsProxy.amountScrollsToBuy - currentScrollQuantity);
         safe_log(
             // eslint-disable-next-line prettier/prettier
-            `Bought ${defaultSettingsProxy.minimumScrollsToUpgrade - currentScrollQuantity
+            `Bought ${defaultSettingsProxy.amountScrollsToBuy - currentScrollQuantity
             } scrolls for ${goldNeeded} gold`,
         );
     }
@@ -306,6 +431,7 @@ async function walkToUpgradeNpc() {
 }
 
 async function upgradeItem() {
+    safe_log(`Upgrading ${defaultSettingsProxy.upgradeItem.id}`);
     const itemToUpgrade: number = locate_item(defaultSettingsProxy.upgradeItem.id as ItemKey);
     const scrollItem: number = locate_item("scroll0");
 
@@ -318,12 +444,82 @@ async function upgradeItem() {
     }
 }
 
+// Check if we have the item to upgrade in the first place.
+async function doNeedItemForUpgrade() {
+    // Loop through our inventory slots
+    for (const [key, value] of Object.entries(character.items)) {
+        // If the slot is not null and the item name matches the item we're looking for, we found the item
+        if (
+            value !== null &&
+            value !== undefined &&
+            value.name === defaultSettingsProxy.upgradeItem.id
+        ) {
+            safe_log(`Found ${defaultSettingsProxy.upgradeItem.id} in slot ${key}`);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+async function buyItemForUpgrade() {
+    // Walk to item vendor
+    if (!smart.moving) {
+        await smart_move({ x: customCharacters.Gabriel.x, y: customCharacters.Gabriel.y });
+    }
+
+    // Buy item
+    await buy(defaultSettingsProxy.upgradeItem.id as ItemKey, 1);
+}
+
+async function equipHighestLevelItem() {
+    // Find the item in our inventory
+    const staffInventoryPosition: number = locate_item(
+        defaultSettingsProxy.upgradeItem.id as ItemKey,
+    );
+    let inventoryStaffLevel: number;
+    let equipmentStaffSlot: SlotType | null = null;
+    let equipmentStaffLevel = 0;
+
+    if (
+        staffInventoryPosition !== undefined &&
+        staffInventoryPosition !== null &&
+        staffInventoryPosition !== -1
+    ) {
+        inventoryStaffLevel = character.items[staffInventoryPosition].level as number;
+    } else {
+        return;
+    }
+
+    // Find the item in our equipment slots
+    for (const [key, value] of Object.entries(character.slots)) {
+        // If the slot is not null and the item name matches the item we're looking for, we found the item
+        if (
+            value !== null &&
+            value !== undefined &&
+            value.name === (defaultSettingsProxy.upgradeItem.id as ItemKey)
+        ) {
+            equipmentStaffSlot = key as SlotType;
+            equipmentStaffLevel = value.level as number;
+            break;
+        }
+    }
+
+    if (equipmentStaffSlot === undefined || equipmentStaffSlot === null) return;
+
+    // If the one in our inventory is higher level, equip it.
+    if (inventoryStaffLevel > equipmentStaffLevel) {
+        equip(staffInventoryPosition, equipmentStaffSlot as SlotType);
+        safe_log(`Equipped ${defaultSettingsProxy.upgradeItem.id} from inventory`);
+    }
+}
+
 async function upgradeItems() {
-    safe_log("Upgrading items");
     // If all items are upgraded, return
     if (defaultSettingsProxy.allItemsUpgraded) {
         safe_log(`Current allItemsUpgraded: ${defaultSettingsProxy.allItemsUpgraded}`);
         safe_log("All items upgraded, returning");
+        return;
     }
     // If we have more than the set amount of gold, start upgrading
     if (character.gold > defaultSettingsProxy.goldToStartUpgrading) {
@@ -337,6 +533,7 @@ async function upgradeItems() {
         safe_log(`Current gold: ${character.gold}, stopping upgrade mode and starting attack mode`);
         defaultSettingsProxy.upgrade_mode = false;
         defaultSettingsProxy.attack_mode = true;
+        return;
     }
 
     // If we're not in upgrade mode, return
@@ -346,22 +543,41 @@ async function upgradeItems() {
     if (!chooseUpgradeItem()) {
         defaultSettingsProxy.allItemsUpgraded = true;
         defaultSettingsProxy.upgrade_mode = false;
+        safe_log("All items upgraded, returning");
         return;
     }
     safe_log(`upgrading item: ${defaultSettingsProxy.upgradeItem.id}`);
 
     // If character not in town, teleport to town
-    // @TODO: TURN townTeleport off when we turn off upgrade move
-    if (defaultSettingsProxy.doTeleportToTown) {
-        await teleportToTown();
+    if (defaultSettingsProxy.doTeleportToTown === true) {
+        await teleportIfWeNeedTo();
         defaultSettingsProxy.doTeleportToTown = false;
     }
 
     const currentScrolls = await needScrolls();
-
+    const needItemForUpgrade = await doNeedItemForUpgrade();
     if (currentScrolls) {
         await buyScrolls(currentScrolls);
     }
+    if (needItemForUpgrade) {
+        safe_log(`We don't have ${defaultSettingsProxy.upgradeItem.id}, going to buy it.`);
+
+        // Do we have enough gold to buy the item?
+        if (
+            defaultSettingsProxy.upgradeItem.id !== undefined &&
+            character.gold < G.items[defaultSettingsProxy.upgradeItem.id as ItemKey].g
+        ) {
+            safe_log(`We don't have enough gold to buy ${defaultSettingsProxy.upgradeItem.id},
+             killing monsters to get gold.`);
+            defaultSettingsProxy.upgrade_mode = false;
+            defaultSettingsProxy.attack_mode = true;
+            return;
+        }
+
+        await buyItemForUpgrade();
+    }
+
+    await equipHighestLevelItem();
 
     // If we're not in upgrade mode, return
     if (!defaultSettingsProxy.upgrade_mode) return;
@@ -373,38 +589,24 @@ async function upgradeItems() {
         return;
     }
 
+    safe_log(`Walking to upgrade NPC`);
     await walkToUpgradeNpc();
 
     // Upgrade item
     await upgradeItem();
+
+    // Keep upgrading until we've gotten to the minimum gold.
+    await upgradeItems();
 }
 
 // Main Loop
 async function mainLoop() {
-    // Create settings if they don't exist
-    createLocalStorage();
-
-    // Heal and loot
     await customHPandMP();
     loot();
-
-    // Check health potions
     await checkHealthPotions();
-
-    // Upgrade items
     await upgradeItems();
+    await battleMonsters(defaultSettingsProxy.currentMonster as unknown as typeof customMonsters);
 
-    // Farm monsters
-    if (
-        defaultSettingsProxy.attack_mode ||
-        character.rip ||
-        is_moving(character) ||
-        !smart.moving
-    ) {
-        await battleMonsters(
-            defaultSettingsProxy.currentMonster as unknown as typeof customMonsters,
-        );
-    }
     setTimeout(mainLoop, 1000 / 4); // Loops every 1/4 seconds.
 }
 

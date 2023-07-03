@@ -51,7 +51,7 @@ export async function customHPandMP() {
     if (character.hp < character.max_hp - 200) {
         use_skill("use_hp");
     }
-    if (character.mp < character.max_mp - 300) {
+    if (character.mp < character.max_mp - 300 || character.mp < 20) {
         use_skill("use_mp");
     }
 }
