@@ -9,5 +9,6 @@ module.exports = {
         "@typescript-eslint/no-explicit-any": "off",
         "no-constant-condition": "off",
         "no-lonely-if": "off",
+        "prettier/prettier": "error",
     },
 };

@@ -1,6 +1,14 @@
+import { defaultSettingsProxy } from "./StorageManager";
+import { customCharacters } from "./CustomCharacters";
+
 /* eslint-disable @typescript-eslint/no-unused-vars */
 // A file containing common functions used throughout the project
 
+export function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
 // Function: print(message)
 // Prints a message to the game console using the <code>safe_log</code> function
 //
@@ -58,4 +66,67 @@ export async function customHPandMP() {
 
 export function Test_Func() {
     print("Test_Func");
+}
+
+export async function teleportToTown() {
+    // Wait for teleport
+    safe_log("Waiting 5 seconds for teleport...");
+    await use_skill("use_town").then(
+        async () => {
+            safe_log("Teleported to town");
+        },
+        async () => {
+            safe_log("Failed to teleport to town");
+        },
+    );
+    await delay(5000);
+}
+
+export async function teleportIfWeNeedTo() {
+    if (character.map === "main" && Math.abs(character.x) < 500 && Math.abs(character.y) < 500) {
+        await teleportToTown();
+    }
+}
+
+export async function checkHealthPotions() {
+    // Make sure we need potions
+    if (quantity("hpot0") < 10 || quantity("mpot0") < 10) {
+        // Make sure we can afford potions
+        const hpot0Price = G.items.hpot0.g;
+        const mpot0Price = G.items.mpot0.g;
+        const currentHealthPotions = quantity("hpot0");
+        const currentManaPotions = quantity("mpot0");
+        const { maxHealthPotions } = defaultSettingsProxy;
+        const { maxManaPotions } = defaultSettingsProxy;
+        const { gold } = character;
+        const goldNeeded =
+            (maxHealthPotions - currentHealthPotions) * hpot0Price +
+            (maxManaPotions - currentManaPotions) * mpot0Price;
+
+        if (gold >= goldNeeded) {
+            defaultSettingsProxy.buyingPotions = true;
+        }
+    } else {
+        defaultSettingsProxy.buyingPotions = false;
+    }
+
+    if (defaultSettingsProxy.buyingPotions) {
+        safe_log("Potions are making us teleport to town.");
+        await teleportIfWeNeedTo();
+        safe_log(`defaultSettingsProxy.buyingPotions: ${defaultSettingsProxy.buyingPotions}`);
+        safe_log("Buying potions...");
+
+        // Move to Ernis
+        if (!smart.moving) {
+            smart_move({ x: customCharacters.Ernis.x, y: customCharacters.Ernis.y });
+        }
+        await delay(1000);
+        while (smart.moving) {
+            await delay(1000);
+        }
+
+        // Buy potions
+        buy("hpot0", defaultSettingsProxy.maxHealthPotions - quantity("hpot0"));
+        buy("mpot0", defaultSettingsProxy.maxManaPotions - quantity("mpot0"));
+    }
 }
