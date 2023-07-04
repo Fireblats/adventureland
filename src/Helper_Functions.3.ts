@@ -1,8 +1,29 @@
 import { defaultSettingsProxy } from "./StorageManager";
 import { customCharacters } from "./CustomCharacters";
 
-/* eslint-disable @typescript-eslint/no-unused-vars */
-// A file containing common functions used throughout the project
+export function is_in_party(potentialPartyMember: string): boolean {
+    const party = get_party();
+    if (party[potentialPartyMember]) return true;
+    return false;
+}
+
+export function PartyManager(leader: boolean) {
+    // Leader invites
+    if (leader) {
+        for (const chars of get_characters()) {
+            if (chars.name === character.id) {
+                game_log(`Can't invite self to party: ${chars.name}`, "#ffff00");
+                continue;
+            }
+
+            if (!is_in_party(chars.name) && chars.online !== 0) {
+                game_log(`Sending party invite to ${chars.name}`, "#ffff00");
+                send_party_invite(chars.name);
+                continue;
+            }
+        }
+    }
+}
 
 export function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));

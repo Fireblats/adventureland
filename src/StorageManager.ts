@@ -1,10 +1,9 @@
 import { customMonsters } from "./CustomMonsters";
 
-/* eslint-disable @typescript-eslint/no-unused-vars */
-
+/* This SHOULD create variables for each character. */
 export const defaultSettings = {
+    // Character Specific Settings
     attack_mode: true,
-    attack_mode_fireblats: true,
     upgrading: false,
     currentMonster: customMonsters.Bee,
     minimumGoldToStopUpgrading: 15000,
@@ -26,14 +25,29 @@ export const defaultSettings = {
 export const defaultSettingsProxy = new Proxy(defaultSettings, {
     get: (o, property) => {
         const propertyFromStorage = localStorage.getItem(property.toString() + character.id);
+
+        // currentMonster is a special case that doesn't include the character.id
+        if (property === "currentMonster") {
+            const currentMonsterFromStorage = localStorage.getItem(property.toString());
+            return currentMonsterFromStorage !== null
+                ? JSON.parse(currentMonsterFromStorage)
+                : null;
+        }
+
         return propertyFromStorage !== null ? JSON.parse(propertyFromStorage) : null;
     },
 
     set: (o, property, value) => {
         localStorage.setItem(property.toString() + character.id, JSON.stringify(value));
+        // currentMonster is a special case that doesn't include the character.id
+        if (property === "currentMonster") {
+            localStorage.setItem(property.toString(), JSON.stringify(value));
+        }
+
         if (property === `upgrade_mode${character.id}` && value === false) {
             defaultSettingsProxy.doTeleportToTown = true;
         }
+
         return true;
     },
 });

@@ -43,6 +43,7 @@ export async function chooseUpgradeItem() {
     }
 
     if (characterSet === null) {
+        game_log("Warn: character.id not found!", "#CF575F");
         characterSet = t1MageItems;
     }
 

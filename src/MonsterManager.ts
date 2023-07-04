@@ -17,7 +17,7 @@ export function getMiddleOfBoundary(boundary: Array<number>) {
     return [mid_x, mid_y] as MonsterPosition;
 }
 
-function chooseMonster() {
+function chooseMonster(maxHitsToKill = 2) {
     // Loop through monsters, finding ones on the grow list
     const growList: Partial<Record<MonsterKey, MonsterPosition>> = {};
     let monsterPosition: MonsterPosition = [0, 0];
@@ -44,7 +44,7 @@ function chooseMonster() {
         if (!growList[monsterKey]) continue;
     }
 
-    const max2ShotHealth = character.attack * 2;
+    const max2ShotHealth = character.attack * maxHitsToKill;
     let bestMob = "goo";
     let bestMobHealth: number = G.monsters.goo.hp;
 
@@ -74,10 +74,10 @@ function chooseMonster() {
 }
 
 // Fights monsters
-export async function battleMonsters(monster: any) {
-    if (character.id === "Fireblats") {
+export async function battleMonsters(monster: any, maxHitsToKill = 2, leader = true) {
+    if (leader) {
         // Choose which monster to farm :)
-        chooseMonster();
+        chooseMonster(maxHitsToKill);
         monster = customMonsters[defaultSettingsProxy.currentMonster.name];
     }
 
